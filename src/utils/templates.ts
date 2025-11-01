@@ -82,7 +82,7 @@ export const workflowTemplates: Workflow[] = [
         description: 'Type phone number for new admin staff',
         config: {
           xpath: "//*[@id='root']/div/div[2]/div[2]/main/div/form/div[1]/div/div[2]/div/div[2]/div/div/input",
-          text: '9808618970'
+          text: '9087777678'
         },
         order: 7
       },
@@ -252,7 +252,7 @@ export const workflowTemplates: Workflow[] = [
         description: "Inputs the patient's phone number in the phone field.",
         config: {
           xpath: "//form//input[@type='tel' and contains(@placeholder, '123')]",
-          text: "+919808618970"
+          text: "9887777890"
         },
         order: 9
       },
