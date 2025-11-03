@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Square, RotateCcw } from 'lucide-react';
+import { API_ENDPOINTS } from '../config/api';
 
 interface RealCloudBrowserProps {
   isExecuting?: boolean;
@@ -25,7 +26,7 @@ export default function RealCloudBrowser({
   useEffect(() => {
     const checkStreamAvailability = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/browser-stream-info');
+        const response = await fetch(API_ENDPOINTS.browserStreamInfo);
         if (response.ok) {
           const data = await response.json();
           setBrowserState(prev => ({ 
@@ -44,7 +45,7 @@ export default function RealCloudBrowser({
     // Health check polling
     const healthInterval = setInterval(async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/health');
+        const response = await fetch(API_ENDPOINTS.health);
         if (response.ok) {
           setBrowserState(prev => ({ ...prev, connected: true }));
         }
@@ -57,7 +58,7 @@ export default function RealCloudBrowser({
     screenshotIntervalRef.current = setInterval(async () => {
       if (!browserState.streamUrl) {
         try {
-          const response = await fetch('http://localhost:5000/api/browser-state');
+          const response = await fetch(API_ENDPOINTS.browserState);
           if (response.ok) {
             const data = await response.json();
             if (data.screenshot) {
@@ -96,7 +97,7 @@ export default function RealCloudBrowser({
 
   const handleResetBrowser = async () => {
     try {
-      await fetch('http://localhost:5000/api/browser', {
+      await fetch(API_ENDPOINTS.browserControl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: 'reset' })

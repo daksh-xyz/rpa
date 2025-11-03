@@ -1,0 +1,8 @@
+Instance ID: i-05e1a22f9778c9273
+Public IP: 3.6.40.14
+Region: ap-south-1
+VPC: vpc-019baedb07daa2779
+Subnet: subnet-0462aa8e75140ae6b
+SSH Command: ssh -i rpa-backend-key.pem ubuntu@3.6.40.14
+API URL: http://3.6.40.14:5000
+VNC URL: http://3.6.40.14:7900

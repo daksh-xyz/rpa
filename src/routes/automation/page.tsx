@@ -8,6 +8,7 @@ import WorkflowManager from '../../components/WorkflowManager';
 import StepSelector from '../../components/StepSelector';
 import { useWorkflowContext } from '../../contexts/WorkflowContext';
 import { type WorkflowStep, type StepType } from '../../types/workflow';
+import { API_ENDPOINTS } from '../../config/api';
 
 type ViewMode = 'workflows' | 'editor';
 
@@ -91,7 +92,7 @@ export default function AutomationPage() {
     setIsExecuting(true);
     
     try {
-      const response = await fetch('http://localhost:5000/api/execute-step', {
+      const response = await fetch(API_ENDPOINTS.executeStep, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(step),
@@ -117,7 +118,7 @@ export default function AutomationPage() {
     setExecutionResults([]);
     
     try {
-      const response = await fetch('http://localhost:5000/api/execute-workflow', {
+      const response = await fetch(API_ENDPOINTS.executeWorkflow, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ steps: currentWorkflow.steps }),

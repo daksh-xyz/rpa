@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Selenium Chrome with built-in VNC support
+  chrome:
+    image: selenium/standalone-chrome:latest
+    platform: linux/amd64
+    container_name: automation-chrome
+    ports:
+      - "4444:4444"    # Selenium WebDriver
+      - "7900:7900"    # noVNC web interface (live browser view)
+      - "5900:5900"    # VNC direct access
+    shm_size: 2gb
+    environment:
+      - SE_VNC_NO_PASSWORD=1
+      - SE_SCREEN_WIDTH=1920
+      - SE_SCREEN_HEIGHT=1080
+      - SE_NODE_MAX_SESSIONS=5
+      - SE_NODE_SESSION_TIMEOUT=300
+    restart: unless-stopped
+    networks:
+      - rpa-network
+
+  # Python Flask Backend
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: automation-backend
+    ports:
+      - "5000:5000"    # Flask API
+    environment:
+      - SELENIUM_URL=http://chrome:4444
+      - VNC_URL=http://3.6.40.14:7900
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - chrome
+    restart: unless-stopped
+    networks:
+      - rpa-network
+
+networks:
+  rpa-network:
+    driver: bridge
