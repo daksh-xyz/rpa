@@ -116,74 +116,187 @@ def build_patient_registration_steps(patient: Dict[str, Any]) -> List[Dict[str, 
             'order': len(steps) + 1,
         })
 
-    first_name = patient.get('first_name', '')
-    last_name = patient.get('last_name', '')
-    phone = patient.get('phone', '')
-    dob = patient.get('date_of_birth', '')
-    gender_raw = patient.get('gender', '').lower()
-    gender_value = 'male' if gender_raw.startswith('m') else 'female' if gender_raw.startswith('f') else ''
-    country = patient.get('country', '')
+    def _parse_dob_parts(raw_value: str) -> Dict[str, int]:
+        defaults = {'year': 2000, 'month_index': 9, 'day': 10}
+        if not raw_value:
+            return defaults
+
+        normalized = raw_value.split('T')[0].strip()
+        date_formats = ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y']
+
+        for fmt in date_formats:
+            try:
+                dt = datetime.strptime(normalized, fmt)
+                return {
+                    'year': dt.year,
+                    'month_index': max(dt.month - 1, 0),
+                    'day': dt.day
+                }
+            except ValueError:
+                continue
+
+        try:
+            dt = datetime.fromisoformat(normalized)
+            return {
+                'year': dt.year,
+                'month_index': max(dt.month - 1, 0),
+                'day': dt.day
+            }
+        except ValueError:
+            return defaults
+
+    login_email = os.environ.get('RPA_LOGIN_EMAIL', 'kerem@novocuris.com')
+    login_password = os.environ.get('RPA_LOGIN_PASSWORD', 'Admin123!SNC')
+
+    first_name = patient.get('first_name') or os.environ.get('RPA_PATIENT_FIRST_NAME', 'Saideep')
+    last_name = patient.get('last_name') or os.environ.get('RPA_PATIENT_LAST_NAME', 'Gogineni')
+    phone = patient.get('phone') or os.environ.get('RPA_PATIENT_PHONE', '9887777890')
+    dob_parts = _parse_dob_parts(patient.get('date_of_birth', '') or os.environ.get('RPA_PATIENT_DOB', '2000-10-10'))
+
+    gender_raw = (patient.get('gender') or os.environ.get('RPA_PATIENT_GENDER', 'male')).lower()
+    gender_value = 'male' if gender_raw.startswith('m') else 'female' if gender_raw.startswith('f') else 'male'
+
+    country = patient.get('country') or os.environ.get('RPA_PATIENT_COUNTRY', 'India')
+    email = patient.get('email') or os.environ.get('RPA_PATIENT_EMAIL', 'testpatient@gmail.com')
+    address_line_one = patient.get('address_line_one') or os.environ.get('RPA_PATIENT_ADDRESS_LINE_ONE', '123 Green Street')
+    city = patient.get('city') or os.environ.get('RPA_PATIENT_CITY', 'Hyderabad')
+    state = patient.get('state') or os.environ.get('RPA_PATIENT_STATE', 'Telangana')
+    zip_code = patient.get('zip_code') or os.environ.get('RPA_PATIENT_ZIP', '500081')
+    nationality = patient.get('nationality') or os.environ.get('RPA_PATIENT_NATIONALITY', 'Indian')
+    blood_group = patient.get('blood_group') or os.environ.get('RPA_PATIENT_BLOOD_GROUP', 'O+')
+    emergency_contact_name = patient.get('emergency_contact_name') or os.environ.get('RPA_PATIENT_EMERGENCY_CONTACT_NAME', 'Ramesh Gogineni')
+    emergency_contact_phone = patient.get('emergency_contact_phone') or os.environ.get('RPA_PATIENT_EMERGENCY_CONTACT_PHONE', '9876543210')
+    profession = patient.get('profession') or os.environ.get('RPA_PATIENT_PROFESSION', 'Software Engineer')
+    employer_name = patient.get('employer_name') or os.environ.get('RPA_PATIENT_EMPLOYER', 'Novocuris Healthcare')
+    marital_status = patient.get('maritial_status') or os.environ.get('RPA_PATIENT_MARITAL_STATUS', 'Single')
 
     add_step('navigate', {'url': 'https://snc.novocuris.org'}, 'Navigate to Login Page')
-    add_step('wait', {'duration': 5}, 'Wait for Login Page')
+    add_step('wait', {'duration': 5}, 'Wait for Page to Load')
     add_step('type', {
         'xpath': "//input[@type='email' and @name='email']",
-        'text': os.environ.get('RPA_LOGIN_EMAIL', 'kerem@novocuris.com'),
+        'text': login_email,
     }, 'Enter Login Email')
     add_step('type', {
         'xpath': "//input[@type='password']",
-        'text': os.environ.get('RPA_LOGIN_PASSWORD', 'Admin123!SNC'),
+        'text': login_password,
     }, 'Enter Login Password')
-    add_step('click', {
-        'xpath': "//button[@type='submit']",
-    }, 'Submit Login Form')
+    add_step('click', {'xpath': "//button[@type='submit']"}, 'Click Login Button')
     add_step('wait', {'duration': 4}, 'Wait after Login')
-    add_step('navigate', {'url': 'https://snc.novocuris.org/home/patients/create'}, 'Open Patient Creation Page')
+    add_step('navigate', {'url': 'https://snc.novocuris.org/home/patients/create'}, 'Navigate to Create Patient Page')
     add_step('wait', {'duration': 3}, 'Wait for Patient Form')
 
-    if first_name:
-        add_step('type', {
-            'xpath': "//form//input[@name='firstName']",
-            'text': first_name,
-        }, 'Enter Patient First Name')
+    add_step('type', {
+        'xpath': "//form//input[@name='firstName']",
+        'text': first_name,
+    }, 'Enter First Name')
 
-    if last_name:
-        add_step('type', {
-            'xpath': "//form//input[@name='lastName']",
-            'text': last_name,
-        }, 'Enter Patient Last Name')
+    add_step('type', {
+        'xpath': "//form//input[@name='lastName']",
+        'text': last_name,
+    }, 'Enter Last Name')
 
-    if phone:
-        add_step('type', {
-            'xpath': "//form//input[@type='tel' and contains(@placeholder, '123')]",
-            'text': phone,
-        }, 'Enter Patient Phone Number')
+    add_step('type', {
+        'xpath': "//form//input[@type='tel' and contains(@placeholder, '123')]",
+        'text': phone,
+    }, 'Enter Phone Number')
 
-    if dob:
-        add_step('click', {
-            'xpath': "//form//input[@name='birthDate']",
-        }, 'Focus Birth Date Field')
-        add_step('type', {
-            'xpath': "//form//input[@name='birthDate']",
-            'text': dob,
-        }, 'Type Patient Date of Birth')
+    add_step('click', {
+        'xpath': "//form//input[@name='birthDate']",
+    }, 'Open Date Picker')
 
-    if gender_value:
-        add_step('click', {
-            'xpath': f"//form//input[@name='gender' and @value='{gender_value}']",
-        }, 'Select Patient Gender')
+    add_step('click', {
+        'xpath': f"//select[contains(@class,'react-datepicker__year-select')]/option[@value='{dob_parts['year']}']",
+    }, 'Select Birth Year')
+
+    add_step('click', {
+        'xpath': f"//select[contains(@class,'react-datepicker__month-select')]/option[@value='{dob_parts['month_index']}']",
+    }, 'Select Birth Month')
+
+    add_step('click', {
+        'xpath': f"//div[contains(@class,'react-datepicker__day') and text()='{dob_parts['day']}' and not(contains(@class,'outside-month'))]",
+    }, 'Select Birth Day')
+
+    add_step('click', {
+        'xpath': f"//form//input[@name='gender' and @value='{gender_value}']",
+    }, 'Select Gender')
 
     add_step('click', {
         'xpath': "//form//input[@name='isExistingPatient' and @value='no']",
-    }, 'Mark as New Patient')
+    }, 'Select Existing Patient - No')
 
-    if country:
-        add_step('click', {
-            'xpath': "//form//div[input[@name='country']]//div[contains(@class,'control')]",
-        }, 'Open Country Dropdown')
-        add_step('click', {
-            'xpath': f"//div[contains(@class,'menu')]//div[text()='{country}']",
-        }, 'Select Patient Country')
+    add_step('click', {
+        'xpath': "//form//div[input[@name='country']]//div[contains(@class,'control')]",
+    }, 'Open Country Dropdown')
+
+    add_step('click', {
+        'xpath': f"//div[contains(@class,'menu')]//div[text()='{country}']",
+    }, 'Select Country')
+
+    add_step('type', {
+        'xpath': "//form//input[@type='email' and @name='email']",
+        'text': email,
+    }, 'Enter Email Address')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='addressLineOne']",
+        'text': address_line_one,
+    }, 'Enter Address Line 1')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='city']",
+        'text': city,
+    }, 'Enter City')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='state']",
+        'text': state,
+    }, 'Enter State')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='zipCode']",
+        'text': zip_code,
+    }, 'Enter Zip Code')
+
+    add_step('click', {
+        'xpath': "//form//div[input[@name='nationality']]//div[contains(@class,'control')]",
+    }, 'Open Nationality Dropdown')
+
+    add_step('click', {
+        'xpath': f"//div[contains(@class,'menu')]//div[text()='{nationality}']",
+    }, 'Select Nationality')
+
+    add_step('click', {
+        'xpath': "//form//div[input[@name='bloodGroup']]//div[contains(@class,'control')]",
+    }, 'Open Blood Group Dropdown')
+
+    add_step('click', {
+        'xpath': f"//div[contains(@class,'menu')]//div[text()='{blood_group}']",
+    }, 'Select Blood Group')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='emergencyContactName']",
+        'text': emergency_contact_name,
+    }, 'Enter Emergency Contact Name')
+
+    add_step('type', {
+        'xpath': "(//form//input[@type='tel'])[2]",
+        'text': emergency_contact_phone,
+    }, 'Enter Emergency Contact Number')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='profession']",
+        'text': profession,
+    }, 'Enter Profession')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='employerName']",
+        'text': employer_name,
+    }, 'Enter Employer Name')
+
+    add_step('type', {
+        'xpath': "//form//input[@name='maritialStatus']",
+        'text': marital_status,
+    }, 'Enter Marital Status')
 
     add_step('click', {
         'xpath': "//form//button[@type='submit' or contains(., 'Add patient')]",
@@ -630,4 +743,3 @@ if __name__ == '__main__':
     print("=" * 60)
     
     socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-
