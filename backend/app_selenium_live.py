@@ -8,6 +8,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import requests
+from typing import Any, Dict, List, Optional
 
 app = Flask(__name__)
 CORS(app)
@@ -17,6 +19,18 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 SELENIUM_URL = os.environ.get('SELENIUM_URL', 'http://localhost:4444')
 VNC_URL = os.environ.get('VNC_URL', 'http://localhost:7900')
 
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://ykalfzcfddigcdwwpngi.supabase.co')
+SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrYWxmemNmZGRpZ2Nkd3dwbmdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI1MzgxODAsImV4cCI6MjA3ODExNDE4MH0.xe6NDvJnripOzkvltikgUu1RAHb1SdmlBWsciJMRLLU')
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_ANON_KEY)
+
+def _build_supabase_headers() -> Dict[str, str]:
+    key = SUPABASE_SERVICE_ROLE_KEY
+    return {
+        'apikey': key,
+        'Authorization': f'Bearer {key}',
+        'Accept': 'application/json',
+    }
+
 # Global browser state
 driver = None
 browser_state = {
@@ -25,6 +39,157 @@ browser_state = {
     'is_running': False
 }
 
+
+def _safe_text(value: Any) -> str:
+    if value is None:
+        return ''
+    return str(value)
+
+
+def fetch_patient_from_supabase(patient_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    if not SUPABASE_URL:
+        return None
+
+    params: Dict[str, str] = {
+        'select': 'id,first_name,last_name,phone,date_of_birth,gender,country,created_at',
+        'limit': '1',
+    }
+
+    if patient_id:
+        params['id'] = f'eq.{patient_id}'
+    else:
+        params['order'] = 'created_at.desc'
+
+    response = requests.get(
+        f'{SUPABASE_URL}/rest/v1/patients',
+        headers=_build_supabase_headers(),
+        params=params,
+        timeout=10,
+    )
+
+    if response.status_code >= 400:
+        raise Exception(
+            f'Supabase request failed with status {response.status_code}: {response.text}',
+        )
+
+    records = response.json()
+    if not records:
+        return None
+
+    record = records[0]
+    return {
+        'id': record.get('id'),
+        'first_name': _safe_text(record.get('first_name')), 
+        'last_name': _safe_text(record.get('last_name')),
+        'phone': _safe_text(record.get('phone')),
+        'date_of_birth': _safe_text(record.get('date_of_birth')),
+        'gender': _safe_text(record.get('gender')),
+        'country': _safe_text(record.get('country')),
+        'created_at': record.get('created_at'),
+    }
+
+
+def _normalize_patient_payload(payload: Optional[Dict[str, Any]], fallback_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not payload:
+        return None
+
+    return {
+        'id': payload.get('id') or fallback_id,
+        'first_name': _safe_text(payload.get('firstName') or payload.get('first_name')),
+        'last_name': _safe_text(payload.get('lastName') or payload.get('last_name')),
+        'phone': _safe_text(payload.get('phone')),
+        'date_of_birth': _safe_text(payload.get('dateOfBirth') or payload.get('date_of_birth')),
+        'gender': _safe_text(payload.get('gender')),
+        'country': _safe_text(payload.get('country')),
+    }
+
+
+def build_patient_registration_steps(patient: Dict[str, Any]) -> List[Dict[str, Any]]:
+    steps: List[Dict[str, Any]] = []
+
+    def add_step(step_type: str, config: Dict[str, Any], title: str) -> None:
+        steps.append({
+            'id': f'patient-auto-{len(steps) + 1}',
+            'type': step_type,
+            'config': config,
+            'title': title,
+            'order': len(steps) + 1,
+        })
+
+    first_name = patient.get('first_name', '')
+    last_name = patient.get('last_name', '')
+    phone = patient.get('phone', '')
+    dob = patient.get('date_of_birth', '')
+    gender_raw = patient.get('gender', '').lower()
+    gender_value = 'male' if gender_raw.startswith('m') else 'female' if gender_raw.startswith('f') else ''
+    country = patient.get('country', '')
+
+    add_step('navigate', {'url': 'https://snc.novocuris.org'}, 'Navigate to Login Page')
+    add_step('wait', {'duration': 5}, 'Wait for Login Page')
+    add_step('type', {
+        'xpath': "//input[@type='email' and @name='email']",
+        'text': os.environ.get('RPA_LOGIN_EMAIL', 'kerem@novocuris.com'),
+    }, 'Enter Login Email')
+    add_step('type', {
+        'xpath': "//input[@type='password']",
+        'text': os.environ.get('RPA_LOGIN_PASSWORD', 'Admin123!SNC'),
+    }, 'Enter Login Password')
+    add_step('click', {
+        'xpath': "//button[@type='submit']",
+    }, 'Submit Login Form')
+    add_step('wait', {'duration': 4}, 'Wait after Login')
+    add_step('navigate', {'url': 'https://snc.novocuris.org/home/patients/create'}, 'Open Patient Creation Page')
+    add_step('wait', {'duration': 3}, 'Wait for Patient Form')
+
+    if first_name:
+        add_step('type', {
+            'xpath': "//form//input[@name='firstName']",
+            'text': first_name,
+        }, 'Enter Patient First Name')
+
+    if last_name:
+        add_step('type', {
+            'xpath': "//form//input[@name='lastName']",
+            'text': last_name,
+        }, 'Enter Patient Last Name')
+
+    if phone:
+        add_step('type', {
+            'xpath': "//form//input[@type='tel' and contains(@placeholder, '123')]",
+            'text': phone,
+        }, 'Enter Patient Phone Number')
+
+    if dob:
+        add_step('click', {
+            'xpath': "//form//input[@name='birthDate']",
+        }, 'Focus Birth Date Field')
+        add_step('type', {
+            'xpath': "//form//input[@name='birthDate']",
+            'text': dob,
+        }, 'Type Patient Date of Birth')
+
+    if gender_value:
+        add_step('click', {
+            'xpath': f"//form//input[@name='gender' and @value='{gender_value}']",
+        }, 'Select Patient Gender')
+
+    add_step('click', {
+        'xpath': "//form//input[@name='isExistingPatient' and @value='no']",
+    }, 'Mark as New Patient')
+
+    if country:
+        add_step('click', {
+            'xpath': "//form//div[input[@name='country']]//div[contains(@class,'control')]",
+        }, 'Open Country Dropdown')
+        add_step('click', {
+            'xpath': f"//div[contains(@class,'menu')]//div[text()='{country}']",
+        }, 'Select Patient Country')
+
+    add_step('click', {
+        'xpath': "//form//button[@type='submit' or contains(., 'Add patient')]",
+    }, 'Submit Patient Form')
+
+    return steps
 def get_driver():
     """Get or create Selenium WebDriver with retry logic"""
     global driver
@@ -136,6 +301,96 @@ def execute_workflow():
             'timestamp': datetime.now().isoformat()
         })
         
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
+@app.route('/api/workflows/patient-registration', methods=['POST'])
+def trigger_patient_registration_workflow():
+    try:
+        payload = request.get_json(silent=True) or {}
+        patient_id = payload.get('patientId') or payload.get('patient_id')
+        fallback_patient = _normalize_patient_payload(payload.get('patientData') or payload.get('patient_data'), patient_id)
+
+        patient_record = None
+
+        if patient_id:
+            patient_record = fetch_patient_from_supabase(patient_id)
+
+        if patient_record is None and fallback_patient:
+            patient_record = fallback_patient
+
+        if patient_record is None:
+            patient_record = fetch_patient_from_supabase()
+
+        if patient_record is None:
+            return jsonify({
+                'success': False,
+                'error': 'Patient data not found in Supabase and no fallback provided',
+                'timestamp': datetime.now().isoformat()
+            }), 404
+
+        steps = build_patient_registration_steps(patient_record)
+
+        if not steps:
+            return jsonify({
+                'success': False,
+                'error': 'Unable to build patient registration workflow steps',
+                'timestamp': datetime.now().isoformat()
+            }), 400
+
+        socketio.emit('workflow_started', {
+            'workflow': 'patient-registration',
+            'patient': patient_record,
+            'total': len(steps),
+            'timestamp': datetime.now().isoformat()
+        })
+
+        results = []
+
+        for step in steps:
+            result = execute_step_with_selenium(step)
+            step_result = {
+                'step_id': step.get('id'),
+                'result': result,
+                'timestamp': datetime.now().isoformat()
+            }
+            results.append(step_result)
+
+            socketio.emit('workflow_progress', {
+                'step': step,
+                'result': result,
+                'completed': len(results),
+                'total': len(steps),
+                'timestamp': datetime.now().isoformat()
+            })
+
+            if not result.get('success'):
+                break
+
+        workflow_success = all(r['result'].get('success') for r in results)
+
+        socketio.emit('workflow_completed', {
+            'workflow': 'patient-registration',
+            'patient': patient_record,
+            'success': workflow_success,
+            'results': results,
+            'timestamp': datetime.now().isoformat()
+        })
+
+        status_code = 200 if workflow_success else 500
+
+        return jsonify({
+            'success': workflow_success,
+            'patient': patient_record,
+            'results': results,
+            'timestamp': datetime.now().isoformat()
+        }), status_code
+
     except Exception as e:
         return jsonify({
             'success': False,
